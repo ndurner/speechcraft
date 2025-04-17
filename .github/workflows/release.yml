@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build_release:
+    name: Build and Publish Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Release Configuration
+        run: |
+          xcodebuild -project SuperWhisper/SuperWhisper/SuperWhisper.xcodeproj \
+            -scheme SuperWhisper -configuration Release \
+            -derivedDataPath build
+      - name: Archive .app
+        run: |
+          mkdir -p artifact
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Build/Products/Release/SuperWhisper.app artifact/SuperWhisper-macOS.zip
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifact/SuperWhisper-macOS.zip
+          asset_name: SuperWhisper-macOS.zip
+          asset_content_type: application/zip
