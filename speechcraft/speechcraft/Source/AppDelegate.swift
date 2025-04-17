@@ -25,6 +25,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var originalSelectedText: String?
     // Status bar item to indicate recording/transcribing state
     private var statusItem: NSStatusItem?
+    // Modal recording mode flag
+    private var modalMode = false
+    // Captured selected text for modal
+    private var modalSelectedText: String?
+    // Temporary URL for modal audio recording
+    private var modalAudioURL: URL?
     private enum TranscribeState {
         case ready, recording, transcribing, error
     }
@@ -66,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let modifiers: CGEventFlags.RawValue
         let character: String
     }
-    private enum HotKeyCaptureType { case record, instruction }
+    private enum HotKeyCaptureType { case record, instruction, modal }
     private var keyCaptureMonitor: Any?
     private var captureType: HotKeyCaptureType?
     // Record hotkey (load or default Option+S)
@@ -85,6 +91,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let mods = CGEventFlags.maskAlternate.union(.maskShift).rawValue
         return HotKey(keyCode: 1, modifiers: mods, character: "S")
+    }()
+    // Modal hotkey (load or default Option+A)
+    var modalHotKey: HotKey = {
+        if let data = UserDefaults.standard.data(forKey: "ModalHotKey"),
+           let hk = try? JSONDecoder().decode(HotKey.self, from: data) {
+            return hk
+        }
+        // keyCode 0 is 'A', Option modifier
+        return HotKey(keyCode: 0, modifiers: CGEventFlags.maskAlternate.rawValue, character: "A")
     }()
 
     /// Returns a human-readable description of a HotKey (e.g. "⌥⇧S").
@@ -217,6 +232,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Record/Stop hotkey
             if keyCode == recordHotKey.keyCode && rawFlags.rawValue == recordHotKey.modifiers {
                 toggleRecording(); return nil
+            }
+            // Modal hotkey: show response in modal dialog
+            if keyCode == modalHotKey.keyCode && rawFlags.rawValue == modalHotKey.modifiers {
+                handleModalHotkey(); return nil
             }
         }
         return Unmanaged.passUnretained(event)
@@ -450,6 +469,218 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
         }
     }
+    // Handle Option+A: always record audio instruction, then chat and show in modal
+    private func handleModalHotkey() {
+        if isRecording && modalMode {
+            // Stop modal recording: capture any selected text then transcribe
+            modalMode = false
+            // Capture current selection if any
+            let pb = NSPasteboard.general
+            let prevCount = pb.changeCount
+            simulateCopy()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                let newPB = NSPasteboard.general
+                if newPB.changeCount > prevCount,
+                   let sel = newPB.string(forType: .string), !sel.isEmpty {
+                    self.modalSelectedText = sel
+                } else {
+                    self.modalSelectedText = nil
+                }
+                self.stopModalRecording()
+            }
+        } else {
+            // Begin modal recording
+            modalMode = true
+            modalSelectedText = nil
+            startModalRecording()
+        }
+    }
+
+    /// Performs chat completion for given transcript and optional selected text, then displays in a modal dialog
+    private func performModalChat(transcript: String, selectedText: String?) {
+        // Visual: network phase (transcribing / blue)
+        DispatchQueue.main.async {
+            self.transcribeState = .transcribing
+        }
+        // Build endpoint and headers
+        let endpoint: String
+        let apiKey: String
+        switch serviceType {
+        case .openAI:
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            guard let key = openAIKey, !key.isEmpty else { return }
+            apiKey = "Bearer \(key)"
+        case .azure:
+            guard let ep = azureChatEndpoint, let key = azureKey,
+                  !ep.isEmpty, !key.isEmpty else { return }
+            endpoint = ep
+            apiKey = key
+        }
+        guard let url = URL(string: endpoint) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if serviceType == .openAI {
+            request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        } else {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
+        // Build content array: screenshot, selected text, then transcript
+        var contentArr: [[String: Any]] = []
+        if #available(macOS 13.0, *) {
+            if let screenshot = captureScreenshotDataURI() {
+                contentArr.append([
+                    "type": "image_url",
+                    "image_url": ["url": screenshot]
+                ])
+            }
+        }
+        if let sel = selectedText, !sel.isEmpty {
+            contentArr.append([
+                "type": "text",
+                "text": sel
+            ])
+        }
+        contentArr.append([
+            "type": "text",
+            "text": transcript
+        ])
+        let userMsg: [String: Any] = ["role": "user", "content": contentArr]
+        let payload: [String: Any] = {
+            if serviceType == .openAI {
+                return ["model": openAIChatModel, "messages": [userMsg]]
+            } else {
+                return ["messages": [userMsg]]
+            }
+        }()
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        // Send request
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            var resultText = ""
+            if let error = error {
+                resultText = "Error: \(error.localizedDescription)"
+            } else if let data = data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let choices = json["choices"] as? [[String: Any]],
+                      let first = choices.first,
+                      let msg = (first["message"] as? [String: Any])?["content"] as? String {
+                resultText = msg
+            } else {
+                resultText = "No response"
+            }
+            DispatchQueue.main.async {
+                self.showModal(resultText)
+                // Back to ready (green)
+                self.transcribeState = .ready
+            }
+        }.resume()
+    }
+
+    /// Displays a modal alert with the given text and a Copy button
+    private func showModal(_ text: String) {
+        let alert = NSAlert()
+        alert.messageText = text
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Copy")
+        alert.addButton(withTitle: "Close")
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+        }
+    }
+    
+    // MARK: - Modal Recording Helpers
+    private func startModalRecording() {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let filename = "speechcraft_modal_\(Date().timeIntervalSince1970).wav"
+        modalAudioURL = tmpDir.appendingPathComponent(filename)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false
+        ]
+        do {
+            audioRecorder = try AVAudioRecorder(url: modalAudioURL!, settings: settings)
+            audioRecorder?.prepareToRecord()
+            audioRecorder?.record()
+            isRecording = true
+            DispatchQueue.main.async { self.transcribeState = .recording }
+        } catch {
+            NSLog("startModalRecording: error starting audio: \(error)")
+        }
+    }
+
+    private func stopModalRecording() {
+        audioRecorder?.stop()
+        isRecording = false
+        DispatchQueue.main.async { self.transcribeState = .transcribing }
+        guard let url = modalAudioURL else { return }
+        // Transcribe audio then perform chat
+        getTranscription(of: url) { transcription in
+            self.performModalChat(transcript: transcription,
+                                  selectedText: self.modalSelectedText)
+        }
+    }
+
+    /// Transcribes audio file to text, invoking completion on main thread.
+    private func getTranscription(of fileURL: URL, completion: @escaping (String) -> Void) {
+        // Prepare request similar to transcribe(fileURL:)
+        let endpointURL: String
+        let authHeader: (String, String)
+        switch serviceType {
+        case .openAI:
+            endpointURL = "https://api.openai.com/v1/audio/transcriptions"
+            guard let key = openAIKey, !key.isEmpty else { return }
+            authHeader = ("Authorization", "Bearer \(key)")
+        case .azure:
+            guard let ep = azureTranscribeEndpoint, let key = azureKey else { return }
+            endpointURL = ep
+            authHeader = ("api-key", key)
+        }
+        guard let url = URL(string: endpointURL) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(authHeader.1, forHTTPHeaderField: authHeader.0)
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        // Model param
+        let modelName = transcriptionModel
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n\(modelName)\r\n".data(using: .utf8)!)
+        // Audio file
+        let fname = fileURL.lastPathComponent
+        if let data = try? Data(contentsOf: fileURL) {
+            // File part header
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            let disposition = "Content-Disposition: form-data; name=\"file\"; filename=\"\(fname)\"\r\n"
+            body.append(disposition.data(using: .utf8)!)
+            body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+            // File data
+            body.append(data)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            var text = ""
+            if let err = error {
+                NSLog("getTranscription error: \(err)")
+            } else if let d = data,
+                      let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                      let t = json["text"] as? String {
+                text = t
+            }
+            DispatchQueue.main.async {
+                completion(text)
+            }
+        }.resume()
+    }
 
     // MARK: - Status Item Indicator
     /// Draws a filled circle image for the given state.
@@ -530,6 +761,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let instrHK = NSMenuItem(title: "Change Instruction Hotkey… (Currently: \(hotKeyDescription(instructionHotKey)))", action: #selector(changeInstructionHotkey(_:)), keyEquivalent: "")
         instrHK.target = self
         menu.addItem(instrHK)
+        // Change Modal Hotkey
+        let modalHK = NSMenuItem(title: "Change Modal Hotkey… (Currently: \(hotKeyDescription(modalHotKey)))", action: #selector(changeModalHotkey(_:)), keyEquivalent: "")
+        modalHK.target = self
+        menu.addItem(modalHK)
         // Quit
         let quit = NSMenuItem(title: "Quit SpeechCraft", action: #selector(quitApp(_:)), keyEquivalent: "q")
         quit.target = self
@@ -574,6 +809,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func changeInstructionHotkey(_ sender: Any?) {
         beginHotKeyCapture(type: .instruction)
     }
+    @objc func changeModalHotkey(_ sender: Any?) {
+        beginHotKeyCapture(type: .modal)
+    }
 
     private func beginHotKeyCapture(type: HotKeyCaptureType) {
         captureType = type
@@ -589,7 +827,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self, let type = self.captureType else { return event }
             // Filter to modifier bits only
             let maskMods: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
-            // Convert rawValue (UInt) to UInt64 for CGEventFlags.RawValue
             let rawMods = UInt64(event.modifierFlags.intersection(maskMods).rawValue)
             let char = event.charactersIgnoringModifiers?.uppercased() ?? ""
             let hk = HotKey(keyCode: event.keyCode, modifiers: rawMods, character: char)
@@ -603,6 +840,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.instructionHotKey = hk
                 if let data = try? JSONEncoder().encode(hk) {
                     self.defaults.set(data, forKey: "InstructionHotKey")
+                }
+            case .modal:
+                self.modalHotKey = hk
+                if let data = try? JSONEncoder().encode(hk) {
+                    self.defaults.set(data, forKey: "ModalHotKey")
                 }
             }
             self.captureType = nil

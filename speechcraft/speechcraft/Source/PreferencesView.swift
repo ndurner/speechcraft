@@ -128,6 +128,7 @@ struct TranscriptionSettingsView: View {
 struct HotkeysSettingsView: View {
     @State private var recordKeyDesc: String = ""
     @State private var instructionKeyDesc: String = ""
+    @State private var modalKeyDesc: String = ""
 
     var body: some View {
         Form {
@@ -135,17 +136,19 @@ struct HotkeysSettingsView: View {
                 Text("Record Hotkey")
                 Spacer()
                 Text(recordKeyDesc)
-                Button("Change") {
-                    changeRecordHotkey()
-                }
+                Button("Change") { changeRecordHotkey() }
             }
             HStack {
                 Text("Instruction Hotkey")
                 Spacer()
                 Text(instructionKeyDesc)
-                Button("Change") {
-                    changeInstructionHotkey()
-                }
+                Button("Change") { changeInstructionHotkey() }
+            }
+            HStack {
+                Text("Modal Hotkey")
+                Spacer()
+                Text(modalKeyDesc)
+                Button("Change") { changeModalHotkey() }
             }
         }
         .padding()
@@ -154,8 +157,9 @@ struct HotkeysSettingsView: View {
 
     private func loadCurrentHotkeys() {
         if let delegate = NSApp.delegate as? AppDelegate {
-            recordKeyDesc = delegate.hotKeyDescription(delegate.recordHotKey)
+            recordKeyDesc     = delegate.hotKeyDescription(delegate.recordHotKey)
             instructionKeyDesc = delegate.hotKeyDescription(delegate.instructionHotKey)
+            modalKeyDesc      = delegate.hotKeyDescription(delegate.modalHotKey)
         }
     }
 
@@ -171,6 +175,14 @@ struct HotkeysSettingsView: View {
     private func changeInstructionHotkey() {
         if let delegate = NSApp.delegate as? AppDelegate {
             delegate.changeInstructionHotkey(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                loadCurrentHotkeys()
+            }
+        }
+    }
+    private func changeModalHotkey() {
+        if let delegate = NSApp.delegate as? AppDelegate {
+            delegate.changeModalHotkey(nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 loadCurrentHotkeys()
             }
