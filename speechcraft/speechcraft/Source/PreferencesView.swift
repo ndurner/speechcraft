@@ -3,7 +3,7 @@ import Cocoa
 
 /// A unified Preferences window with sidebar navigation across settings categories.
 struct PreferencesView: View {
-    enum Tab: String, CaseIterable, Identifiable {
+    enum Tab: String, CaseIterable, Identifiable, Hashable {
         case general = "General"
         case transcription = "Transcription"
         case hotkeys = "Hotkeys"
@@ -13,19 +13,24 @@ struct PreferencesView: View {
 
     var body: some View {
         NavigationView {
+            // Sidebar navigation
             List(selection: $selection) {
                 ForEach(Tab.allCases) { tab in
-                    NavigationLink(value: tab) {
-                        Label(tab.rawValue, systemImage: iconName(for: tab))
-                    }
+                    Label(tab.rawValue, systemImage: iconName(for: tab))
+                        .tag(tab)
                 }
             }
             .listStyle(SidebarListStyle())
             .frame(minWidth: 150)
+
+            // Detail pane: fill available space
             detailView(for: selection)
+                .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .navigationViewStyle(DoubleColumnNavigationViewStyle())
+        // Set a reasonable default width so form fields have room
+        .frame(minWidth: 600, idealWidth: 750, maxWidth: 1000, minHeight: 400)
     }
 
     private func iconName(for tab: Tab) -> String {
@@ -57,6 +62,10 @@ struct GeneralSettingsView: View {
     @AppStorage("AzureKey") private var azureKey: String = ""
     @AppStorage("AzureTranscribeEndpoint") private var azureTranscribeEndpoint: String = ""
     @AppStorage("AzureChatEndpoint") private var azureChatEndpoint: String = ""
+    // Auto-stop recording on silence
+    @AppStorage("EnableAutoSilenceStop") private var enableAutoSilenceStop: Bool = false
+    // Duration of silence (in seconds) before auto-stop
+    @AppStorage("SilenceTimeout") private var silenceTimeout: Double = 2.0
 
     var body: some View {
         Form {
@@ -80,6 +89,17 @@ struct GeneralSettingsView: View {
                 TextField("Transcribe Endpoint", text: $azureTranscribeEndpoint)
                 TextField("Chat Endpoint", text: $azureChatEndpoint)
             }
+            Section(header: Text("Silence Detection")) {
+                Toggle("Auto-stop recording on silence", isOn: $enableAutoSilenceStop)
+                HStack {
+                    Text("Silence duration")
+                    Spacer()
+                    Stepper(value: $silenceTimeout, in: 0.5...10.0, step: 0.5) {
+                        Text("\(silenceTimeout, specifier: "%.1f") sec")
+                    }
+                    .disabled(!enableAutoSilenceStop)
+                }
+            }
         }
         .padding()
     }
@@ -89,6 +109,8 @@ struct GeneralSettingsView: View {
 struct TranscriptionSettingsView: View {
     @AppStorage("TranscriptionModel") private var transcriptionModel: String = "gpt-4o-transcribe"
     @AppStorage("TranscriptionPrompt") private var transcriptionPrompt: String = ""
+    // Toggle for including screen capture in instruction mode
+    @AppStorage("EnableScreenshots") private var enableScreenshots: Bool = true
     private let availableModels = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper"]
 
     var body: some View {
@@ -101,6 +123,7 @@ struct TranscriptionSettingsView: View {
             .pickerStyle(PopUpButtonPickerStyle())
 
             TextField("Prompt (optional)", text: $transcriptionPrompt)
+            Toggle("Include screenshot in instruction mode", isOn: $enableScreenshots)
         }
         .padding()
     }
