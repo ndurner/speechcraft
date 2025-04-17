@@ -35,12 +35,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     // Service configuration
     private enum ServiceType: String { case openAI = "OpenAI", azure = "Azure" }
-    private var serviceType: ServiceType = ServiceType(rawValue: UserDefaults.standard.string(forKey: "ServiceType") ?? "OpenAI") ?? .openAI
-    private var openAIKey: String? = UserDefaults.standard.string(forKey: "OpenAIKey")
-    private var openAIChatModel: String = UserDefaults.standard.string(forKey: "OpenAIChatModel") ?? "gpt-3.5-turbo"
-    private var azureKey: String? = UserDefaults.standard.string(forKey: "AzureKey")
-    private var azureTranscribeEndpoint: String? = UserDefaults.standard.string(forKey: "AzureTranscribeEndpoint")
-    private var azureChatEndpoint: String? = UserDefaults.standard.string(forKey: "AzureChatEndpoint")
+    /// Current service type, read directly from UserDefaults
+    private var serviceType: ServiceType {
+        ServiceType(rawValue: UserDefaults.standard.string(forKey: "ServiceType") ?? "OpenAI") ?? .openAI
+    }
+    /// OpenAI API key from settings
+    private var openAIKey: String? {
+        UserDefaults.standard.string(forKey: "OpenAIKey")
+    }
+    /// OpenAI chat model from settings
+    private var openAIChatModel: String {
+        UserDefaults.standard.string(forKey: "OpenAIChatModel") ?? "gpt-3.5-turbo"
+    }
+    /// Azure API key from settings
+    private var azureKey: String? {
+        UserDefaults.standard.string(forKey: "AzureKey")
+    }
+    /// Azure transcription endpoint from settings
+    private var azureTranscribeEndpoint: String? {
+        UserDefaults.standard.string(forKey: "AzureTranscribeEndpoint")
+    }
+    /// Azure chat endpoint from settings
+    private var azureChatEndpoint: String? {
+        UserDefaults.standard.string(forKey: "AzureChatEndpoint")
+    }
     private let defaults = UserDefaults.standard
     // MARK: - HotKey Capture
     struct HotKey: Codable {
@@ -677,129 +695,98 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Captures the screen where the cursor is using ScreenCaptureKit and returns a base64-encoded PNG data URI.
+    /// Captures a one‐off screenshot of the frontmost application using ScreenCaptureKit
+    /// and returns it as a PNG data URI.
     @available(macOS 13.0, *)
     private func captureScreenshotDataURI() -> String? {
-        // Find the display under the mouse
-        let mouseLoc = NSEvent.mouseLocation
-        NSLog("captureScreenshotDataURI: mouseLoc = \(mouseLoc)")
-        var displayCount: UInt32 = 0
-        let maxDisplays: UInt32 = 16
-        var activeIDs = [CGDirectDisplayID](repeating: 0, count: Int(maxDisplays))
-        CGGetActiveDisplayList(maxDisplays, &activeIDs, &displayCount)
-        let displays = Array(activeIDs.prefix(Int(displayCount)))
-        NSLog("captureScreenshotDataURI: active displays = \(displays)")
-        guard let targetID = displays.first(where: { CGDisplayBounds($0).contains(mouseLoc) }) else {
-            NSLog("captureScreenshotDataURI: no display contains mouse location")
+        // 1) Identify frontmost app
+        guard let frontApp = NSWorkspace.shared.frontmostApplication,
+              let bundleID = frontApp.bundleIdentifier else {
+            NSLog("captureScreenshotDataURI: no frontmost application")
             return nil
         }
-        // Semaphores to coordinate async calls
-        let doneSem = DispatchSemaphore(value: 0)
-        var resultURI: String?
-        // Request shareable content
-        NSLog("captureScreenshotDataURI: requesting SCShareableContent (excludeDesktopWindows: false, onScreenWindowsOnly: false)")
-        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { content, error in
-            NSLog("captureScreenshotDataURI: SCShareableContent callback invoked (content: \(content != nil), error: \(String(describing: error)))")
-            defer { doneSem.signal() }
-            if let err = error {
-                NSLog("captureScreenshotDataURI: SCShareableContent error: \(err.localizedDescription)")
-            } else {
-                let ids = content?.displays.map { $0.displayID } ?? []
-                NSLog("captureScreenshotDataURI: SCShareableContent got displays \(ids)")
-            }
-            guard let content = content else {
-                NSLog("captureScreenshotDataURI: no SCShareableContent (error: \(error?.localizedDescription ?? "unknown"))")
-                return
-            }
-            NSLog("captureScreenshotDataURI: SCShareableContent contains displays = \(content.displays.map { $0.displayID })")
-            // Find matching SCDisplay
-            guard let scDisplay = content.displays.first(where: { $0.displayID == targetID }) else {
-                let ids = content.displays.map { $0.displayID }
-                NSLog("captureScreenshotDataURI: no matching SCDisplay for targetID \(targetID), available: \(ids)")
-                return
-            }
-            NSLog("captureScreenshotDataURI: selected SCDisplay id=\(scDisplay.displayID)")
-            // Configure stream
-            let config = SCStreamConfiguration()
-            config.pixelFormat = kCVPixelFormatType_32BGRA
-            config.showsCursor = true
-            NSLog("captureScreenshotDataURI: SCStreamConfiguration pixelFormat=\(config.pixelFormat), showsCursor=\(config.showsCursor)")
 
-            // Create a content filter for the target display (capture all windows)
-            let filter = SCContentFilter(display: scDisplay, excludingWindows: [])
-            NSLog("captureScreenshotDataURI: SCContentFilter created for displayID=\(scDisplay.displayID), excludingWindowsCount=0")
-            // Initialize stream with no delegate (we'll add outputs manually)
-            let stream = SCStream(filter: filter, configuration: config, delegate: nil)
-            NSLog("captureScreenshotDataURI: SCStream created")
-            // Semaphore for first frame
-            let frameSem = DispatchSemaphore(value: 0)
-            var capturedBuffer: CVImageBuffer?
-            // Output delegate
-            class Delegate: NSObject, SCStreamOutput {
-                let frameSem: DispatchSemaphore
-                var buffer: CVImageBuffer?
-                init(frameSem: DispatchSemaphore) { self.frameSem = frameSem }
-                func stream(_ stream: SCStream, didOutput sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
-                    if let imgBuf = sampleBuffer.imageBuffer {
-                        buffer = imgBuf
-                        frameSem.signal()
-                    }
-                }
+        // 2) Fetch shareable content (only on‐screen windows)
+        var shareableContent: SCShareableContent?
+        let contentSem = DispatchSemaphore(value: 0)
+        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
+            if let error = error {
+                NSLog("captureScreenshotDataURI: error fetching content: \(error.localizedDescription)")
             }
-            let delegate = Delegate(frameSem: frameSem)
-            do {
-                try stream.addStreamOutput(delegate,
-                                           type: .screen,
-                                           sampleHandlerQueue: DispatchQueue(label: "screenCaptureQueue"))
-                NSLog("captureScreenshotDataURI: added stream output of type .screen")
-            } catch {
-                NSLog("captureScreenshotDataURI: failed to add stream output: \(error)")
-            }
-            // Start capture
-            stream.startCapture { err in
-                if let err = err {
-                    NSLog("captureScreenshotDataURI: startCapture error: \(err)")
-                } else {
-                    NSLog("captureScreenshotDataURI: startCapture succeeded")
-                }
-            }
-            // Wait for frame
-            let frameResult = frameSem.wait(timeout: .now() + 2)
-            if frameResult == .success {
-                capturedBuffer = delegate.buffer
-                NSLog("captureScreenshotDataURI: frame captured")
-            } else {
-                NSLog("captureScreenshotDataURI: timeout waiting for frame")
-            }
-            // Stop capture
-            let stopSem = DispatchSemaphore(value: 0)
-            stream.stopCapture { err in
-                if let err = err {
-                    NSLog("captureScreenshotDataURI: stopCapture error: \(err)")
-                } else {
-                    NSLog("captureScreenshotDataURI: stopCapture succeeded")
-                }
-                stopSem.signal()
-            }
-            _ = stopSem.wait(timeout: .now() + 2)
-            // Convert to PNG data URI
-            if let imageBuffer = capturedBuffer {
-                NSLog("captureScreenshotDataURI: converting capturedBuffer to PNG data")
-                let ciImage = CIImage(cvImageBuffer: imageBuffer)
-                let context = CIContext()
-                if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
-                    let bitmap = NSBitmapImageRep(cgImage: cgImage)
-                    if let pngData = bitmap.representation(using: .png, properties: [:]) {
-                        NSLog("captureScreenshotDataURI: png data size = \(pngData.count)")
-                        let base64 = pngData.base64EncodedString()
-                        resultURI = "data:image/png;base64,\(base64)"
-                    }
-                }
-            }
+            shareableContent = content
+            contentSem.signal()
         }
-        // Wait for everything to complete
-        _ = doneSem.wait(timeout: .now() + 5)
-        let returningURI = resultURI ?? "nil"
-        NSLog("captureScreenshotDataURI: returning \(returningURI)")
+        _ = contentSem.wait(timeout: .now() + 5)
+
+        guard let content = shareableContent else {
+            NSLog("captureScreenshotDataURI: no shareable content")
+            return nil
+        }
+
+        // 3) Exclude every other app’s windows
+        let appsToExclude = content.applications.filter { $0.bundleIdentifier != bundleID }
+
+        // 4) Pick a display (we’ll just pick the first one)
+        guard let scDisplay = content.displays.first else {
+            NSLog("captureScreenshotDataURI: no displays available")
+            return nil
+        }
+
+        // 5) Build a filter that leaves only the frontmost app’s windows
+        let filter = SCContentFilter(
+            display: scDisplay,
+            excludingApplications: appsToExclude,
+            exceptingWindows: []
+        )
+
+        // 6) Screenshot configuration
+        let config = SCStreamConfiguration()
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.showsCursor  = true
+
+        // 7) Fire off the async screenshot
+        var resultURI: String?
+        let captureSem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                let cgImage = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: config
+                )
+                // Downscale if max dimension > 1280px
+                let maxSide = max(cgImage.width, cgImage.height)
+                let finalCG: CGImage
+                if maxSide > 1280 {
+                    let scale = 1280.0 / Double(maxSide)
+                    let ciSrc = CIImage(cgImage: cgImage)
+                    if let scaleFilter = CIFilter(name: "CILanczosScaleTransform") {
+                        scaleFilter.setValue(ciSrc, forKey: kCIInputImageKey)
+                        scaleFilter.setValue(scale, forKey: kCIInputScaleKey)
+                        scaleFilter.setValue(1.0, forKey: kCIInputAspectRatioKey)
+                        let ciCtx = CIContext()
+                        if let outCI = scaleFilter.outputImage,
+                           let scaledCG = ciCtx.createCGImage(outCI, from: outCI.extent) {
+                            finalCG = scaledCG
+                        } else {
+                            finalCG = cgImage
+                        }
+                    } else {
+                        finalCG = cgImage
+                    }
+                } else {
+                    finalCG = cgImage
+                }
+                let bitmap = NSBitmapImageRep(cgImage: finalCG)
+                if let png = bitmap.representation(using: .png, properties: [:]) {
+                    let b64 = png.base64EncodedString()
+                    resultURI = "data:image/png;base64,\(b64)"
+                }
+            } catch {
+                NSLog("captureScreenshotDataURI: screenshot error: \(error)")
+            }
+            captureSem.signal()
+        }
+        _ = captureSem.wait(timeout: .now() + 5)
         return resultURI
     }
 
@@ -836,27 +823,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             request.setValue(apiKey, forHTTPHeaderField: "api-key")
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Build payload, including screenshot if available
-        var userMessage = ""
+        // Build a single user message with structured content: optional image + text
+        var contentArr: [[String: Any]] = []
         if #available(macOS 13.0, *) {
             if let screenshot = captureScreenshotDataURI() {
                 NSLog("Screen Captured!")
-                userMessage += "Here is a screenshot of the current screen:\n\(screenshot)\n\n"
+                contentArr.append([
+                    "type": "image_url",
+                    "image_url": ["url": screenshot]
+                ])
             }
         }
-        userMessage += "Instruction: \(instruction)"
+        // Add the instruction as a text part
+        var textPart: [String: Any] = ["type": "text", "text": "Instruction: \(instruction)"]
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText {
-            userMessage += "\nText: \(text)"
-        }
-        if hasText {
-            userMessage += "\nPlease execute the instruction on the text and return only the output without any explanation."
+            textPart["text"] = (textPart["text"] as! String)
+                + "\nText: \(text)"
+                + "\nPlease execute the instruction on the text and return only the output without any explanation."
         } else {
-            userMessage += "\nPlease execute the instruction and return only the output without any explanation."
+            textPart["text"] = (textPart["text"] as! String)
+                + "\nPlease execute the instruction and return only the output without any explanation."
         }
-        let messages = [["role": "user", "content": userMessage]]
-        // Log the final user message sent to the chat API
-        NSLog("Sending Chat API user message: %@", userMessage)
+        contentArr.append(textPart)
+        // Construct the chat message array
+        let userMsg: [String: Any] = ["role": "user", "content": contentArr]
+        let messages = [userMsg]
+        NSLog("Sending Chat API messages: %@", messages)
+        // Prepare payload
         let payload: [String: Any]
         if serviceType == .openAI {
             payload = ["model": openAIChatModel, "messages": messages]
