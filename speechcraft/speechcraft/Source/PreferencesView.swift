@@ -78,8 +78,6 @@ struct GeneralSettingsView: View {
             if serviceType == "OpenAI" {
                 SecureField("API Key", text: $openAIKey)
                 Picker("Chat Model", selection: $openAIChatModel) {
-                    Text("gpt-3.5-turbo").tag("gpt-3.5-turbo")
-                    Text("gpt-4").tag("gpt-4")
                     Text("gpt-4o").tag("gpt-4o")
                     Text("gpt-4o-mini").tag("gpt-4o-mini")
                 }
@@ -91,14 +89,11 @@ struct GeneralSettingsView: View {
             }
             Section(header: Text("Silence Detection")) {
                 Toggle("Auto-stop recording on silence", isOn: $enableAutoSilenceStop)
-                HStack {
-                    Text("Silence duration")
-                    Spacer()
-                    Stepper(value: $silenceTimeout, in: 0.5...10.0, step: 0.5) {
-                        Text("\(silenceTimeout, specifier: "%.1f") sec")
-                    }
-                    .disabled(!enableAutoSilenceStop)
+                Text("Silence duration")
+                Stepper(value: $silenceTimeout, in: 0.5...10.0, step: 0.5) {
+                    Text("\(silenceTimeout, specifier: "%.1f") sec")
                 }
+                .disabled(!enableAutoSilenceStop)
             }
         }
         .padding()
