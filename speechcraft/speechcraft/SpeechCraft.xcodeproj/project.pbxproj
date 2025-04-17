@@ -11,6 +11,7 @@
 		F9C02B272DB0EDFC00D6665F /* SpeechCraftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C02B252DB0EDFC00D6665F /* SpeechCraftApp.swift */; };
 		F9C02B2A2DB0EE4E00D6665F /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9C02B292DB0EE4E00D6665F /* AVFoundation.framework */; };
 		F9C02B2C2DB0EE5F00D6665F /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9C02B2B2DB0EE5F00D6665F /* ApplicationServices.framework */; };
+		F9C02B362DB107D400D6665F /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C02B352DB107D400D6665F /* PreferencesView.swift */; };
 		F9C02B382DB10B6D00D6665F /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9C02B372DB10B6C00D6665F /* ScreenCaptureKit.framework */; };
 /* End PBXBuildFile section */
 
@@ -20,6 +21,7 @@
 		F9C02B252DB0EDFC00D6665F /* SpeechCraftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCraftApp.swift; sourceTree = "<group>"; };
 		F9C02B292DB0EE4E00D6665F /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F9C02B2B2DB0EE5F00D6665F /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
+		F9C02B352DB107D400D6665F /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		F9C02B372DB10B6C00D6665F /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -91,6 +93,7 @@
 			children = (
 				F9C02B242DB0EDFC00D6665F /* AppDelegate.swift */,
 				F9C02B252DB0EDFC00D6665F /* SpeechCraftApp.swift */,
+				F9C02B352DB107D400D6665F /* PreferencesView.swift */,
 			);
 			path = Source;
 			sourceTree = "<group>";
@@ -170,6 +173,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9C02B262DB0EDFC00D6665F /* AppDelegate.swift in Sources */,
+				F9C02B362DB107D400D6665F /* PreferencesView.swift in Sources */,
 				F9C02B272DB0EDFC00D6665F /* SpeechCraftApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

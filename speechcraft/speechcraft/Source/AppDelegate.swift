@@ -13,6 +13,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesWindow: NSWindow?
     var runLoopSource: CFRunLoopSource?
     var audioRecorder: AVAudioRecorder?
+    // Silence-detection auto-stop
+    private var silenceTimer: Timer?
+    private var lastVoiceDate: Date?
+    /// dB level below which is considered silence
+    private let silenceLevelThreshold: Float = -30.0
     var isRecording = false
     var audioURL: URL?
     // Instruction recording mode
@@ -104,6 +109,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Register default preferences
+        UserDefaults.standard.register(defaults: [
+            "EnableScreenshots": true,
+            "EnableAutoSilenceStop": false,
+            "SilenceTimeout": 2.0
+        ])
         // Check and request Accessibility permission
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
         if !AXIsProcessTrustedWithOptions(options) {
@@ -217,16 +228,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         do {
             audioRecorder = try AVAudioRecorder(url: audioURL!, settings: settings)
+            // Enable metering for silence detection
+            audioRecorder?.isMeteringEnabled = true
             audioRecorder?.prepareToRecord()
             audioRecorder?.record()
-            NSLog("Recording started")
+            NSLog("startRecording: Recording started")
             transcribeState = .recording
+            // Auto-stop on silence if enabled
+            let autoStop = UserDefaults.standard.bool(forKey: "EnableAutoSilenceStop")
+            if autoStop {
+                let timeout = UserDefaults.standard.double(forKey: "SilenceTimeout")
+                NSLog("startRecording: Auto-silence-stop enabled (timeout = %.2f s)", timeout)
+                lastVoiceDate = Date()
+                // Schedule periodic level checks
+                silenceTimer?.invalidate()
+                silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+                    self?.checkSilence()
+                }
+            }
         } catch {
             NSLog("Failed to start recording: \(error)")
         }
     }
 
     func stopRecording() {
+        // Invalidate silence detection timer
+        if let timer = silenceTimer {
+            timer.invalidate()
+            silenceTimer = nil
+            NSLog("stopRecording: silence timer invalidated")
+        }
         audioRecorder?.stop()
         transcribeState = .transcribing
         audioRecorder = nil
@@ -235,6 +266,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             transcribeInstruction(fileURL: url)
         } else {
             transcribe(fileURL: url)
+        }
+    }
+    
+    /// Periodically called to detect silence and auto-stop recording
+    private func checkSilence() {
+        guard let recorder = audioRecorder else { return }
+        recorder.updateMeters()
+        let level = recorder.averagePower(forChannel: 0)
+        let now = Date()
+        NSLog("checkSilence: level = %.1f dB", level)
+        if level > silenceLevelThreshold {
+            // Detected voice, reset timer
+            lastVoiceDate = now
+        } else if let last = lastVoiceDate {
+            let silenceDuration = now.timeIntervalSince(last)
+            let timeout = UserDefaults.standard.double(forKey: "SilenceTimeout")
+            if silenceDuration >= timeout {
+                NSLog("checkSilence: silence for %.2f s, timeout %.2f s reached, auto-stopping", silenceDuration, timeout)
+                // Stop timer and recording
+                silenceTimer?.invalidate()
+                silenceTimer = nil
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self, self.isRecording else { return }
+                    self.stopRecording()
+                    self.isRecording = false
+                }
+            }
         }
     }
 
