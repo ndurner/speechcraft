@@ -877,16 +877,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     // MARK: - Instruction Mode
     private func transcribeInstruction(fileURL: URL) {
-        // Transcribe the spoken instruction
-        guard let endpoint = ProcessInfo.processInfo.environment["AZURE_OPENAI_ENDPOINT"],
-              let apiKey = ProcessInfo.processInfo.environment["AZURE_OPENAI_KEY"],
-              let url = URL(string: endpoint) else {
-            NSLog("AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_KEY not set or invalid")
+        // Transcribe the spoken instruction using stored credentials
+        let endpointURL: String
+        let authHeader: (String, String)
+        switch serviceType {
+        case .openAI:
+            endpointURL = "https://api.openai.com/v1/audio/transcriptions"
+            guard let key = openAIKey, !key.isEmpty else {
+                NSLog("OpenAI API key not configured")
+                return
+            }
+            authHeader = ("Authorization", "Bearer \(key)")
+        case .azure:
+            guard let ep = azureTranscribeEndpoint, !ep.isEmpty,
+                  let key = azureKey, !key.isEmpty else {
+                NSLog("Azure transcription endpoint or API key not configured")
+                return
+            }
+            endpointURL = ep
+            authHeader = ("api-key", key)
+        }
+        guard let url = URL(string: endpointURL) else {
+            NSLog("Invalid transcription endpoint URL: \(endpointURL)")
             return
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        request.setValue(authHeader.1, forHTTPHeaderField: authHeader.0)
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         var body = Data()
