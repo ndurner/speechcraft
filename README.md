@@ -20,6 +20,7 @@
 - 🖼️ **Visual Context**: Optionally include a screenshot for richer prompts (macOS 13+).
 - 🔐 **Flexible Deployment**: Supports App Store (sandboxed) or Developer ID (hardened runtime) builds.
 - 🚀 **Minimal Footprint**: Runs in the menu bar, no Dock icon.
+- 💬 **Modal Chat**: Press **Option+A** to record an audio instruction (optionally with selected text & screenshot), then view the AI’s response in a modal dialog with Copy/Close buttons.
 
 ## Requirements
 - macOS 12.0 (Monterey) or later
@@ -58,6 +59,7 @@
 ## Usage
 - **Option+S**: Start/stop voice recording → automatic transcription & paste.
 - **Option+Shift+S**: Copy selection → record instruction → GPT‑4o applies changes → replaces text.
+- **Option+A**: Start/stop audio instruction recording (captures optional selected text & screenshot) → sends to AI chat → displays the response in a modal dialog with Copy/Close options.
 
 🟢 Ready | 🔴 Recording | 🔵 Processing
 

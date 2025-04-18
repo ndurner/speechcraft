@@ -240,7 +240,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return Unmanaged.passUnretained(event)
     }
-
+    
     func toggleRecording() {
         if !isRecording {
             startRecording()
@@ -1077,15 +1077,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // Add the instruction as a text part
-        var textPart: [String: Any] = ["type": "text", "text": "Instruction: \(instruction)"]
+        var textPart: [String: Any] = ["type": "text", "text": "I want you to: \(instruction)"]
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText {
             textPart["text"] = (textPart["text"] as! String)
                 + "\nText: \(text)"
-                + "\nPlease execute the instruction on the text and return only the output without any explanation."
+                + "\nPlease modify the text in accordance with the requirement and return only the output without any explanation."
         } else {
             textPart["text"] = (textPart["text"] as! String)
-                + "\nPlease execute the instruction and return only the output without any explanation."
+                + "\nPlease return only the output without any explanation."
         }
         contentArr.append(textPart)
         // Construct the chat message array
