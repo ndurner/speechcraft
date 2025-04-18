@@ -32,7 +32,7 @@
 
 If you just want to try SpeechCraft, download the latest DMG from the Releases page on GitHub and install it directly. No build tools are required:
 
-https://github.com/yourorg/SpeechCraft/releases
+https://github.com/esawtooth/SpeechCraft/releases
 
 Developers who wish to build from source can follow the instructions below.
 
