@@ -7,11 +7,12 @@
 ## Table of Contents
 1. [Features](#features)
 2. [Requirements](#requirements)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Usage](#usage)
-6. [Development](#development)
-7. [License](#license)
+3. [Getting the App](#getting-the-app)
+4. [Installation](#installation)
+5. [Configuration](#configuration)
+6. [Usage](#usage)
+7. [Development](#development)
+8. [License](#license)
 
 ## Features
 - 🎤 **Push‑to‑Talk Transcription**: Start/stop recording with **Option+S**, auto‑paste the transcript.
@@ -26,6 +27,14 @@
 - macOS 12.0 (Monterey) or later
 - Xcode 14 or later (Swift 5.5+)
 - An OpenAI or Azure OpenAI subscription
+
+## Getting the App
+
+If you just want to try SpeechCraft, download the latest DMG from the Releases page on GitHub and install it directly. No build tools are required:
+
+https://github.com/yourorg/SpeechCraft/releases
+
+Developers who wish to build from source can follow the instructions below.
 
 ## Installation
 1. Clone the repo:
