@@ -7,10 +7,12 @@ import CoreMedia
 import CoreVideo
 import ScreenCaptureKit
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var eventTap: CFMachPort?
     // SwiftUI Preferences window
-    private var preferencesWindow: NSWindow?
+    var preferencesWindow: NSWindow?
+    /// Window used to display markdown-rendered AI responses
+    var responseWindow: NSWindow?
     var runLoopSource: CFRunLoopSource?
     var audioRecorder: AVAudioRecorder?
     // Silence-detection auto-stop
@@ -21,51 +23,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isRecording = false
     var audioURL: URL?
     // Instruction recording mode
-    private var instructionMode = false
-    private var originalSelectedText: String?
+    var instructionMode = false
+    var originalSelectedText: String?
     // Status bar item to indicate recording/transcribing state
-    private var statusItem: NSStatusItem?
+    var statusItem: NSStatusItem?
     // Modal recording mode flag
-    private var modalMode = false
+    var modalMode = false
     // Captured selected text for modal
-    private var modalSelectedText: String?
+    var modalSelectedText: String?
     // Temporary URL for modal audio recording
-    private var modalAudioURL: URL?
-    private enum TranscribeState {
+    var modalAudioURL: URL?
+    enum TranscribeState {
         case ready, recording, transcribing, error
     }
     // Configurable transcription model and prompt
-    private var transcriptionModel = UserDefaults.standard.string(forKey: "TranscriptionModel") ?? "gpt-4o-transcribe"
-    private let availableModels = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper"]
-    private var transcriptionPrompt = UserDefaults.standard.string(forKey: "TranscriptionPrompt") ?? ""
+    var transcriptionModel = UserDefaults.standard.string(forKey: "TranscriptionModel") ?? "gpt-4o-transcribe"
+    let availableModels = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper"]
+    var transcriptionPrompt = UserDefaults.standard.string(forKey: "TranscriptionPrompt") ?? ""
     
     // Service configuration
-    private enum ServiceType: String { case openAI = "OpenAI", azure = "Azure" }
+    enum ServiceType: String { case openAI = "OpenAI", azure = "Azure" }
     /// Current service type, read directly from UserDefaults
-    private var serviceType: ServiceType {
+    var serviceType: ServiceType {
         ServiceType(rawValue: UserDefaults.standard.string(forKey: "ServiceType") ?? "OpenAI") ?? .openAI
     }
     /// OpenAI API key from settings
-    private var openAIKey: String? {
+    var openAIKey: String? {
         UserDefaults.standard.string(forKey: "OpenAIKey")
     }
     /// OpenAI chat model from settings
-    private var openAIChatModel: String {
+    var openAIChatModel: String {
         UserDefaults.standard.string(forKey: "OpenAIChatModel") ?? "gpt-3.5-turbo"
     }
     /// Azure API key from settings
-    private var azureKey: String? {
+    var azureKey: String? {
         UserDefaults.standard.string(forKey: "AzureKey")
     }
     /// Azure transcription endpoint from settings
-    private var azureTranscribeEndpoint: String? {
+    var azureTranscribeEndpoint: String? {
         UserDefaults.standard.string(forKey: "AzureTranscribeEndpoint")
     }
     /// Azure chat endpoint from settings
-    private var azureChatEndpoint: String? {
+    var azureChatEndpoint: String? {
         UserDefaults.standard.string(forKey: "AzureChatEndpoint")
     }
-    private let defaults = UserDefaults.standard
+    let defaults = UserDefaults.standard
     // MARK: - HotKey Capture
     struct HotKey: Codable {
         let keyCode: CGKeyCode
@@ -115,7 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Transcription State
-    private var transcribeState: TranscribeState = .ready {
+    var transcribeState: TranscribeState = .ready {
         didSet { updateStatusIcon() }
     }
 
@@ -417,45 +419,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }.resume()
     }
 
-    func insertTranscript(_ transcript: String) {
-        let pasteboard = NSPasteboard.general
-        // Save existing plain-text string (if any)
-        let previousString = pasteboard.string(forType: .string)
-        // Overwrite with our transcript
-        pasteboard.clearContents()
-        pasteboard.setString(transcript, forType: .string)
-        // Simulate paste (Cmd+V)
-        simulatePaste()
-        // Restore prior clipboard string after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            pasteboard.clearContents()
-            if let prev = previousString {
-                pasteboard.setString(prev, forType: .string)
-            }
-        }
-    }
-
-    func simulatePaste() {
-        let src = CGEventSource(stateID: .hidSystemState)
-        let vKeyCode: CGKeyCode = 9
-        let keyDown = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: true)
-        keyDown?.flags = .maskCommand
-        let keyUp = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: false)
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
-    }
-    // Simulate Command+C to copy the current selection
-    private func simulateCopy() {
-        let src = CGEventSource(stateID: .hidSystemState)
-        let cKeyCode: CGKeyCode = 8  // 'c'
-        let keyDown = CGEvent(keyboardEventSource: src, virtualKey: cKeyCode, keyDown: true)
-        keyDown?.flags = .maskCommand
-        let keyUp = CGEvent(keyboardEventSource: src, virtualKey: cKeyCode, keyDown: false)
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
-    }
     // Handle Option+Shift+S: copy selection and record audio for instruction
     private func handleInstructionHotkey() {
         if !isRecording {
@@ -478,218 +441,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
         }
     }
-    // Handle Option+A: always record audio instruction, then chat and show in modal
-    private func handleModalHotkey() {
-        if isRecording && modalMode {
-            // Stop modal recording: capture any selected text then transcribe
-            modalMode = false
-            // Capture current selection if any
-            let pb = NSPasteboard.general
-            let prevCount = pb.changeCount
-            simulateCopy()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                let newPB = NSPasteboard.general
-                if newPB.changeCount > prevCount,
-                   let sel = newPB.string(forType: .string), !sel.isEmpty {
-                    self.modalSelectedText = sel
-                } else {
-                    self.modalSelectedText = nil
-                }
-                self.stopModalRecording()
-            }
-        } else {
-            // Begin modal recording
-            modalMode = true
-            modalSelectedText = nil
-            startModalRecording()
-        }
-    }
-
-    /// Performs chat completion for given transcript and optional selected text, then displays in a modal dialog
-    private func performModalChat(transcript: String, selectedText: String?) {
-        // Visual: network phase (transcribing / blue)
-        DispatchQueue.main.async {
-            self.transcribeState = .transcribing
-        }
-        // Build endpoint and headers
-        let endpoint: String
-        let apiKey: String
-        switch serviceType {
-        case .openAI:
-            endpoint = "https://api.openai.com/v1/chat/completions"
-            guard let key = openAIKey, !key.isEmpty else { return }
-            apiKey = "Bearer \(key)"
-        case .azure:
-            guard let ep = azureChatEndpoint, let key = azureKey,
-                  !ep.isEmpty, !key.isEmpty else { return }
-            endpoint = ep
-            apiKey = key
-        }
-        guard let url = URL(string: endpoint) else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if serviceType == .openAI {
-            request.setValue(apiKey, forHTTPHeaderField: "Authorization")
-        } else {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
-        // Build content array: screenshot, selected text, then transcript
-        var contentArr: [[String: Any]] = []
-        if #available(macOS 13.0, *) {
-            if let screenshot = captureScreenshotDataURI() {
-                contentArr.append([
-                    "type": "image_url",
-                    "image_url": ["url": screenshot]
-                ])
-            }
-        }
-        if let sel = selectedText, !sel.isEmpty {
-            contentArr.append([
-                "type": "text",
-                "text": sel
-            ])
-        }
-        contentArr.append([
-            "type": "text",
-            "text": transcript
-        ])
-        let userMsg: [String: Any] = ["role": "user", "content": contentArr]
-        let payload: [String: Any] = {
-            if serviceType == .openAI {
-                return ["model": openAIChatModel, "messages": [userMsg]]
-            } else {
-                return ["messages": [userMsg]]
-            }
-        }()
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        // Send request
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            var resultText = ""
-            if let error = error {
-                resultText = "Error: \(error.localizedDescription)"
-            } else if let data = data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let choices = json["choices"] as? [[String: Any]],
-                      let first = choices.first,
-                      let msg = (first["message"] as? [String: Any])?["content"] as? String {
-                resultText = msg
-            } else {
-                resultText = "No response"
-            }
-            DispatchQueue.main.async {
-                self.showModal(resultText)
-                // Back to ready (green)
-                self.transcribeState = .ready
-            }
-        }.resume()
-    }
-
-    /// Displays a modal alert with the given text and a Copy button
-    private func showModal(_ text: String) {
-        let alert = NSAlert()
-        alert.messageText = text
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Copy")
-        alert.addButton(withTitle: "Close")
-        NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(text, forType: .string)
-        }
-    }
-    
-    // MARK: - Modal Recording Helpers
-    private func startModalRecording() {
-        let tmpDir = FileManager.default.temporaryDirectory
-        let filename = "speechcraft_modal_\(Date().timeIntervalSince1970).wav"
-        modalAudioURL = tmpDir.appendingPathComponent(filename)
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false
-        ]
-        do {
-            audioRecorder = try AVAudioRecorder(url: modalAudioURL!, settings: settings)
-            audioRecorder?.prepareToRecord()
-            audioRecorder?.record()
-            isRecording = true
-            DispatchQueue.main.async { self.transcribeState = .recording }
-        } catch {
-            NSLog("startModalRecording: error starting audio: \(error)")
-        }
-    }
-
-    private func stopModalRecording() {
-        audioRecorder?.stop()
-        isRecording = false
-        DispatchQueue.main.async { self.transcribeState = .transcribing }
-        guard let url = modalAudioURL else { return }
-        // Transcribe audio then perform chat
-        getTranscription(of: url) { transcription in
-            self.performModalChat(transcript: transcription,
-                                  selectedText: self.modalSelectedText)
-        }
-    }
-
-    /// Transcribes audio file to text, invoking completion on main thread.
-    private func getTranscription(of fileURL: URL, completion: @escaping (String) -> Void) {
-        // Prepare request similar to transcribe(fileURL:)
-        let endpointURL: String
-        let authHeader: (String, String)
-        switch serviceType {
-        case .openAI:
-            endpointURL = "https://api.openai.com/v1/audio/transcriptions"
-            guard let key = openAIKey, !key.isEmpty else { return }
-            authHeader = ("Authorization", "Bearer \(key)")
-        case .azure:
-            guard let ep = azureTranscribeEndpoint, let key = azureKey else { return }
-            endpointURL = ep
-            authHeader = ("api-key", key)
-        }
-        guard let url = URL(string: endpointURL) else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(authHeader.1, forHTTPHeaderField: authHeader.0)
-        let boundary = "Boundary-\(UUID().uuidString)"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        var body = Data()
-        // Model param
-        let modelName = transcriptionModel
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n\(modelName)\r\n".data(using: .utf8)!)
-        // Audio file
-        let fname = fileURL.lastPathComponent
-        if let data = try? Data(contentsOf: fileURL) {
-            // File part header
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            let disposition = "Content-Disposition: form-data; name=\"file\"; filename=\"\(fname)\"\r\n"
-            body.append(disposition.data(using: .utf8)!)
-            body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-            // File data
-            body.append(data)
-            body.append("\r\n".data(using: .utf8)!)
-        }
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            var text = ""
-            if let err = error {
-                NSLog("getTranscription error: \(err)")
-            } else if let d = data,
-                      let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                      let t = json["text"] as? String {
-                text = t
-            }
-            DispatchQueue.main.async {
-                completion(text)
-            }
-        }.resume()
-    }
+   
 
     // MARK: - Status Item Indicator
     /// Draws a filled circle image for the given state.
@@ -966,7 +718,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Captures a one‐off screenshot of the frontmost application using ScreenCaptureKit
     /// and returns it as a PNG data URI.
     @available(macOS 13.0, *)
-    private func captureScreenshotDataURI() -> String? {
+    func captureScreenshotDataURI() -> String? {
         // Honor user preference: skip screenshots if disabled
         if !defaults.bool(forKey: "EnableScreenshots") {
             return nil
@@ -1062,123 +814,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return resultURI
     }
 
-    /// Sends a chat completion request via OpenAI/Azure, using optional model override for OpenAI.
-    private func callChat(instruction: String, text: String, modelOverride: String? = nil, completion: @escaping (String) -> Void) {
-        // Determine chat endpoint and key
-        let endpointURL: String
-        let apiKey: String
-        switch serviceType {
-        case .openAI:
-            endpointURL = "https://api.openai.com/v1/chat/completions"
-            guard let key = openAIKey, !key.isEmpty else {
-                NSLog("OpenAI API key not configured")
-                return
-            }
-            apiKey = key
-        case .azure:
-            guard let ep = azureChatEndpoint, !ep.isEmpty,
-                  let key = azureKey, !key.isEmpty else {
-                NSLog("Azure chat endpoint or API key not configured")
-                return
-            }
-            endpointURL = ep
-            apiKey = key
-        }
-        guard let url = URL(string: endpointURL) else {
-            NSLog("Invalid chat endpoint URL: \(endpointURL)")
-            return
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        if serviceType == .openAI {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        } else {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Build a single user message with structured content: optional image + text
-        var contentArr: [[String: Any]] = []
-        if #available(macOS 13.0, *) {
-            if let screenshot = captureScreenshotDataURI() {
-                NSLog("Screen Captured!")
-                contentArr.append([
-                    "type": "image_url",
-                    "image_url": ["url": screenshot]
-                ])
-            }
-        }
-        // Add the instruction as a text part
-        var textPart: [String: Any] = ["type": "text", "text": "I want you to: \(instruction)"]
-        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if hasText {
-            textPart["text"] = (textPart["text"] as! String)
-                + "\nText: \(text)"
-                + "\nPlease modify the text in accordance with the requirement and return only the output without any explanation."
-        } else {
-            textPart["text"] = (textPart["text"] as! String)
-                + "\nPlease return only the output without any explanation."
-        }
-        contentArr.append(textPart)
-        // Construct the chat message array
-        let userMsg: [String: Any] = ["role": "user", "content": contentArr]
-        let messages = [userMsg]
-        NSLog("Sending Chat API messages: %@", messages)
-        // Prepare payload: choose modelOverride if provided, else default chat model
-        let payload: [String: Any]
-        if serviceType == .openAI {
-            let chatModel = modelOverride ?? openAIChatModel
-            payload = ["model": chatModel, "messages": messages]
-        } else {
-            payload = ["messages": messages]
-        }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                NSLog("Chat completion error: \(error)")
-                return
-            }
-            guard let data = data else {
-                NSLog("Chat completion: no data in response")
-                return
-            }
-            // Try to parse JSON choices
-            var resultText: String? = nil
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let choices = json["choices"] as? [[String: Any]],
-               let first = choices.first {
-                // Chat completion format
-                if let message = (first["message"] as? [String: Any])?["content"] as? String {
-                    resultText = message
-                }
-                // Fallback to text (e.g., completions endpoint)
-                else if let text = first["text"] as? String {
-                    resultText = text
-                }
-            }
-            // If parsing failed, fallback to raw response string
-            if resultText == nil, let raw = String(data: data, encoding: .utf8) {
-                resultText = raw
-            }
-            if let output = resultText {
-                completion(output)
-            } else {
-                NSLog("Failed to parse chat completion response, data: %s", String(describing: String(data: data, encoding: .utf8) ?? "<non-textual>") )
-            }
-        }.resume()
-    }
-
-    /// Sends the transcript to GPT-4o for proofreading with screenshot, then inserts cleaned result.
-    private func proofreadTranscript(transcript: String) {
-        // Indicate proofread in progress
-        self.transcribeState = .transcribing
-        let instruction = "Please proofread and clean up the following transcript. Return only the cleaned transcript without any explanation."
-        // Use user-selected proofreading model if available
-        let proofModel = defaults.string(forKey: "ProofreadingModel") ?? openAIChatModel
-        self.callChat(instruction: instruction, text: transcript, modelOverride: proofModel) { cleaned in
-            DispatchQueue.main.async {
-                self.insertTranscript(cleaned)
-                self.transcribeState = .ready
-            }
-        }
-    }
+    // Chat functions moved to ChatService.swift
 }

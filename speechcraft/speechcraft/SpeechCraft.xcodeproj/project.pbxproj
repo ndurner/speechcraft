@@ -13,6 +13,11 @@
 		F9C02B2C2DB0EE5F00D6665F /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9C02B2B2DB0EE5F00D6665F /* ApplicationServices.framework */; };
 		F9C02B362DB107D400D6665F /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C02B352DB107D400D6665F /* PreferencesView.swift */; };
 		F9C02B382DB10B6D00D6665F /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9C02B372DB10B6C00D6665F /* ScreenCaptureKit.framework */; };
+		F9F903532DB3B1AD005E13A8 /* ClipboardHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F903502DB3B1AD005E13A8 /* ClipboardHelper.swift */; };
+		F9F903542DB3B1AD005E13A8 /* MarkdownResponseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F903512DB3B1AD005E13A8 /* MarkdownResponseView.swift */; };
+		F9F903552DB3B1AD005E13A8 /* ModalChatHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F903522DB3B1AD005E13A8 /* ModalChatHandler.swift */; };
+		F9F903562DB3B1AD005E13A8 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F9034F2DB3B1AD005E13A8 /* ChatService.swift */; };
+		F9F903592DB3B853005E13A8 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = F9F903582DB3B853005E13A8 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +28,10 @@
 		F9C02B2B2DB0EE5F00D6665F /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
 		F9C02B352DB107D400D6665F /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		F9C02B372DB10B6C00D6665F /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
+		F9F9034F2DB3B1AD005E13A8 /* ChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
+		F9F903502DB3B1AD005E13A8 /* ClipboardHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHelper.swift; sourceTree = "<group>"; };
+		F9F903512DB3B1AD005E13A8 /* MarkdownResponseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownResponseView.swift; sourceTree = "<group>"; };
+		F9F903522DB3B1AD005E13A8 /* ModalChatHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalChatHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,6 +63,7 @@
 				F9C02B382DB10B6D00D6665F /* ScreenCaptureKit.framework in Frameworks */,
 				F9C02B2C2DB0EE5F00D6665F /* ApplicationServices.framework in Frameworks */,
 				F9C02B2A2DB0EE4E00D6665F /* AVFoundation.framework in Frameworks */,
+				F9F903592DB3B853005E13A8 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +101,10 @@
 		F9C02B2D2DB0EE8B00D6665F /* Source */ = {
 			isa = PBXGroup;
 			children = (
+				F9F9034F2DB3B1AD005E13A8 /* ChatService.swift */,
+				F9F903502DB3B1AD005E13A8 /* ClipboardHelper.swift */,
+				F9F903512DB3B1AD005E13A8 /* MarkdownResponseView.swift */,
+				F9F903522DB3B1AD005E13A8 /* ModalChatHandler.swift */,
 				F9C02B242DB0EDFC00D6665F /* AppDelegate.swift */,
 				F9C02B252DB0EDFC00D6665F /* SpeechCraftApp.swift */,
 				F9C02B352DB107D400D6665F /* PreferencesView.swift */,
@@ -118,6 +132,7 @@
 			);
 			name = SpeechCraft;
 			packageProductDependencies = (
+				F9F903582DB3B853005E13A8 /* MarkdownUI */,
 			);
 			productName = SuperWhisper;
 			productReference = F9C02B132DB0ED1F00D6665F /* SpeechCraft.app */;
@@ -147,6 +162,9 @@
 			);
 			mainGroup = F9C02B0A2DB0ED1F00D6665F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F9F903572DB3B853005E13A8 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F9C02B142DB0ED1F00D6665F /* Products */;
 			projectDirPath = "";
@@ -172,6 +190,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F9F903532DB3B1AD005E13A8 /* ClipboardHelper.swift in Sources */,
+				F9F903542DB3B1AD005E13A8 /* MarkdownResponseView.swift in Sources */,
+				F9F903552DB3B1AD005E13A8 /* ModalChatHandler.swift in Sources */,
+				F9F903562DB3B1AD005E13A8 /* ChatService.swift in Sources */,
 				F9C02B262DB0EDFC00D6665F /* AppDelegate.swift in Sources */,
 				F9C02B362DB107D400D6665F /* PreferencesView.swift in Sources */,
 				F9C02B272DB0EDFC00D6665F /* SpeechCraftApp.swift in Sources */,
@@ -386,6 +408,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F9F903572DB3B853005E13A8 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F9F903582DB3B853005E13A8 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F9F903572DB3B853005E13A8 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F9C02B0B2DB0ED1F00D6665F /* Project object */;
 }
