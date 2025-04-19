@@ -146,7 +146,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: [
             "EnableScreenshots": true,
             "EnableAutoSilenceStop": false,
-            "SilenceTimeout": 2.0
+            "SilenceTimeout": 2.0,
+            // New default: enable GPT-4o proofreading of transcripts
+            "EnableProofreading": true,
+            // Default model for GPT-4o proofreading
+            "ProofreadingModel": "gpt-4o"
         ])
         // Check and request Accessibility permission
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
@@ -402,8 +406,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             DispatchQueue.main.async {
-                self.insertTranscript(text)
-                self.transcribeState = .ready
+                // After transcription: either proofread via GPT-4o or insert raw text
+                if self.defaults.bool(forKey: "EnableProofreading") {
+                    self.proofreadTranscript(transcript: text)
+                } else {
+                    self.insertTranscript(text)
+                    self.transcribeState = .ready
+                }
             }
         }.resume()
     }
@@ -958,6 +967,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// and returns it as a PNG data URI.
     @available(macOS 13.0, *)
     private func captureScreenshotDataURI() -> String? {
+        // Honor user preference: skip screenshots if disabled
+        if !defaults.bool(forKey: "EnableScreenshots") {
+            return nil
+        }
         // 1) Identify frontmost app
         guard let frontApp = NSWorkspace.shared.frontmostApplication,
               let bundleID = frontApp.bundleIdentifier else {
@@ -1049,7 +1062,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return resultURI
     }
 
-    private func callChat(instruction: String, text: String, completion: @escaping (String) -> Void) {
+    /// Sends a chat completion request via OpenAI/Azure, using optional model override for OpenAI.
+    private func callChat(instruction: String, text: String, modelOverride: String? = nil, completion: @escaping (String) -> Void) {
         // Determine chat endpoint and key
         let endpointURL: String
         let apiKey: String
@@ -1109,10 +1123,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let userMsg: [String: Any] = ["role": "user", "content": contentArr]
         let messages = [userMsg]
         NSLog("Sending Chat API messages: %@", messages)
-        // Prepare payload
+        // Prepare payload: choose modelOverride if provided, else default chat model
         let payload: [String: Any]
         if serviceType == .openAI {
-            payload = ["model": openAIChatModel, "messages": messages]
+            let chatModel = modelOverride ?? openAIChatModel
+            payload = ["model": chatModel, "messages": messages]
         } else {
             payload = ["messages": messages]
         }
@@ -1150,5 +1165,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Failed to parse chat completion response, data: %s", String(describing: String(data: data, encoding: .utf8) ?? "<non-textual>") )
             }
         }.resume()
+    }
+
+    /// Sends the transcript to GPT-4o for proofreading with screenshot, then inserts cleaned result.
+    private func proofreadTranscript(transcript: String) {
+        // Indicate proofread in progress
+        self.transcribeState = .transcribing
+        let instruction = "Please proofread and clean up the following transcript. Return only the cleaned transcript without any explanation."
+        // Use user-selected proofreading model if available
+        let proofModel = defaults.string(forKey: "ProofreadingModel") ?? openAIChatModel
+        self.callChat(instruction: instruction, text: transcript, modelOverride: proofModel) { cleaned in
+            DispatchQueue.main.async {
+                self.insertTranscript(cleaned)
+                self.transcribeState = .ready
+            }
+        }
     }
 }

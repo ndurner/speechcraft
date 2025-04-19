@@ -104,8 +104,13 @@ struct GeneralSettingsView: View {
 struct TranscriptionSettingsView: View {
     @AppStorage("TranscriptionModel") private var transcriptionModel: String = "gpt-4o-transcribe"
     @AppStorage("TranscriptionPrompt") private var transcriptionPrompt: String = ""
-    // Toggle for including screen capture in instruction mode
+    // Control for including screenshots in all GPT requests
     @AppStorage("EnableScreenshots") private var enableScreenshots: Bool = true
+    // Control for enabling GPT-4o proofreading of transcripts
+    @AppStorage("EnableProofreading") private var enableProofreading: Bool = true
+    // Model selection for GPT-4o proofreading
+    @AppStorage("ProofreadingModel") private var proofreadingModel: String = "gpt-4o"
+    private let proofreadingModels = ["gpt-4o", "gpt-4o-mini"]
     private let availableModels = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper"]
 
     var body: some View {
@@ -118,7 +123,16 @@ struct TranscriptionSettingsView: View {
             .pickerStyle(PopUpButtonPickerStyle())
 
             TextField("Prompt (optional)", text: $transcriptionPrompt)
-            Toggle("Include screenshot in instruction mode", isOn: $enableScreenshots)
+            // Screenshot and proofread options
+            Toggle("Include screenshots in GPT requests", isOn: $enableScreenshots)
+            Toggle("Enable GPT-4o proofreading", isOn: $enableProofreading)
+            Picker("Proofreading Model", selection: $proofreadingModel) {
+                ForEach(proofreadingModels, id: \.self) { model in
+                    Text(model).tag(model)
+                }
+            }
+            .pickerStyle(PopUpButtonPickerStyle())
+            .disabled(!enableProofreading)
         }
         .padding()
     }

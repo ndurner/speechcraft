@@ -18,7 +18,9 @@
 - 🎤 **Push‑to‑Talk Transcription**: Start/stop recording with **Option+S**, auto‑paste the transcript.
 - ✂️ **Smart Text Transformations**: Copy selection, speak an instruction with **Option+Shift+S**, and replace text via GPT‑4o.
 - 📋 **Clipboard Integration**: Seamlessly saves and restores your clipboard.
-- 🖼️ **Visual Context**: Optionally include a screenshot for richer prompts (macOS 13+).
+- 🖼️ **Visual Context**: Optionally include a screenshot for richer prompts (macOS 13+).
+  Configure via **Transcription → Include screenshots in GPT requests**.
+- 📝 **Proofread Transcripts**: Automatically proofread and clean up your transcriptions with GPT-4o with image context. Yes, you can now dictate code!
 - 🔐 **Flexible Deployment**: Supports App Store (sandboxed) or Developer ID (hardened runtime) builds.
 - 🚀 **Minimal Footprint**: Runs in the menu bar, no Dock icon.
 - 💬 **Modal Chat**: Press **Option+A** to record an audio instruction (optionally with selected text & screenshot), then view the AI’s response in a modal dialog with Copy/Close buttons.
