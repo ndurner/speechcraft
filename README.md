@@ -77,9 +77,13 @@ Developers who wish to build from source can follow the instructions below.
 ## Development
 1. Fork the repo and create a feature branch.
 2. Open in Xcode, implement your changes.
-3. Run & test locally.
-4. Submit a pull request with clear commit messages.
-5. Ensure SwiftLint and pre‑commit hooks pass.
+3. If you have a custom icon (e.g. `icon.png`), you can embed it into your built `.app` by running:
+   ```bash
+   python3 apply_icon.py /path/to/SpeechCraft.app icon.png
+   ```
+4. Run & test locally.
+5. Submit a pull request with clear commit messages.
+6. Ensure SwiftLint and pre‑commit hooks pass.
 
 ## License
 This project is released under the MIT License. See [LICENSE](LICENSE) for details.
