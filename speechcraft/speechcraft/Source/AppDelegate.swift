@@ -53,7 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     /// OpenAI chat model from settings
     var openAIChatModel: String {
-        UserDefaults.standard.string(forKey: "OpenAIChatModel") ?? "gpt-3.5-turbo"
+        UserDefaults.standard.string(forKey: "OpenAIChatModel") ?? "gpt-4o"
     }
     /// Azure API key from settings
     var azureKey: String? {
@@ -146,13 +146,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Register default preferences
         UserDefaults.standard.register(defaults: [
+            // Include screenshots in GPT requests by default
             "EnableScreenshots": true,
+            // Silence detection defaults
             "EnableAutoSilenceStop": false,
             "SilenceTimeout": 2.0,
             // New default: enable GPT-4o proofreading of transcripts
             "EnableProofreading": true,
             // Default model for GPT-4o proofreading
-            "ProofreadingModel": "gpt-4o"
+            "ProofreadingModel": "gpt-4o",
+            // Default prompt for transcription
+            "TranscriptionPrompt": "Transcribe everything and do not truncate text"
         ])
         // Check and request Accessibility permission
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
@@ -613,6 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 NSEvent.removeMonitor(monitor)
                 self.keyCaptureMonitor = nil
             }
+            
             self.configureMenu()
             return nil
         }
@@ -630,6 +635,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 defer: false)
             window.title = "Preferences"
             window.contentViewController = hostingController
+            // Keep delegate so we can clear on close
+            window.delegate = self
+            // Don't auto-release; we manage lifecycle via preferencesWindow property and delegate
+            window.isReleasedWhenClosed = false
             preferencesWindow = window
         }
         preferencesWindow?.center()
