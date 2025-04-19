@@ -1,5 +1,9 @@
 # SpeechCraft
 
+<p align="center">
+  <img src="icon.png" alt="SpeechCraft Icon" width="128" height="128" />
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Swift 5.5+](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org) [![Platform: macOS 12+](https://img.shields.io/badge/macOS-12%2B-lightgrey.svg)](https://www.apple.com/macos)
 
 > A lightweight macOS menu‑bar utility that turns your voice into text and smart edits using the OpenAI API.
