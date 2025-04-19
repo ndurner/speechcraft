@@ -15,6 +15,7 @@
 8. [License](#license)
 
 ## Features
+- 🔑 **Bring Your Own Key**: You can use your own keys for OpenAI or Azure OpenAI and configure them directly in the app.
 - 🎤 **Push‑to‑Talk Transcription**: Start/stop recording with **Option+S**, auto‑paste the transcript.
 - ✂️ **Smart Text Transformations**: Copy selection, speak an instruction with **Option+Shift+S**, and replace text via GPT‑4o.
 - 📋 **Clipboard Integration**: Seamlessly saves and restores your clipboard.
