@@ -143,6 +143,7 @@ struct HotkeysSettingsView: View {
     @State private var recordKeyDesc: String = ""
     @State private var instructionKeyDesc: String = ""
     @State private var modalKeyDesc: String = ""
+    @State private var scriptKeyDesc: String = ""
 
     var body: some View {
         Form {
@@ -164,6 +165,12 @@ struct HotkeysSettingsView: View {
                 Text(modalKeyDesc)
                 Button("Change") { changeModalHotkey() }
             }
+            HStack {
+                Text("Script Hotkey")
+                Spacer()
+                Text(scriptKeyDesc)
+                Button("Change") { changeScriptHotkey() }
+            }
         }
         .padding()
         .onAppear(perform: loadCurrentHotkeys)
@@ -171,9 +178,10 @@ struct HotkeysSettingsView: View {
 
     private func loadCurrentHotkeys() {
         if let delegate = NSApp.delegate as? AppDelegate {
-            recordKeyDesc     = delegate.hotKeyDescription(delegate.recordHotKey)
+            recordKeyDesc      = delegate.hotKeyDescription(delegate.recordHotKey)
             instructionKeyDesc = delegate.hotKeyDescription(delegate.instructionHotKey)
-            modalKeyDesc      = delegate.hotKeyDescription(delegate.modalHotKey)
+            modalKeyDesc       = delegate.hotKeyDescription(delegate.modalHotKey)
+            scriptKeyDesc      = delegate.hotKeyDescription(delegate.scriptHotKey)
         }
     }
 
@@ -197,6 +205,14 @@ struct HotkeysSettingsView: View {
     private func changeModalHotkey() {
         if let delegate = NSApp.delegate as? AppDelegate {
             delegate.changeModalHotkey(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                loadCurrentHotkeys()
+            }
+        }
+    }
+    private func changeScriptHotkey() {
+        if let delegate = NSApp.delegate as? AppDelegate {
+            delegate.changeScriptHotkey(nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 loadCurrentHotkeys()
             }

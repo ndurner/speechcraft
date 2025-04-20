@@ -74,7 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let modifiers: CGEventFlags.RawValue
         let character: String
     }
-    private enum HotKeyCaptureType { case record, instruction, modal }
+    private enum HotKeyCaptureType { case record, instruction, modal, script }
     private var keyCaptureMonitor: Any?
     private var captureType: HotKeyCaptureType?
     // Record hotkey (load or default Option+S)
@@ -103,6 +103,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // keyCode 0 is 'A', Option modifier
         return HotKey(keyCode: 0, modifiers: CGEventFlags.maskAlternate.rawValue, character: "A")
     }()
+    // Script hotkey (load or default Option+D)
+    var scriptHotKey: HotKey = {
+        if let data = UserDefaults.standard.data(forKey: "ScriptHotKey"),
+           let hk = try? JSONDecoder().decode(HotKey.self, from: data) {
+            return hk
+        }
+        // keyCode 2 is 'D', Option modifier
+        return HotKey(keyCode: 2, modifiers: CGEventFlags.maskAlternate.rawValue, character: "D")
+    }()
+    // Script recording mode flag
+    var scriptMode = false
+    // Captured selected text for script
+    var scriptSelectedText: String?
+    // Temporary URL for script audio recording
+    var scriptAudioURL: URL?
 
     /// Returns a human-readable description of a HotKey (e.g. "⌥⇧S").
     func hotKeyDescription(_ hk: HotKey) -> String {
@@ -156,7 +171,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Default model for GPT-4o proofreading
             "ProofreadingModel": "gpt-4o",
             // Default prompt for transcription
-            "TranscriptionPrompt": "Transcribe everything and do not truncate text"
+            "TranscriptionPrompt": "Transcribe everything and do not truncate text",
+            // Default prompt for AppleScript generation: include activation of target apps
+            "ScriptPrompt": "You are an assistant that generates AppleScript commands for macOS based on provided instructions. Always launch or activate the target application before issuing commands (e.g., 'tell application \"AppName\" to activate'). Only output valid AppleScript code without additional explanation."
         ])
         // Check and request Accessibility permission
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
@@ -246,6 +263,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Modal hotkey: show response in modal dialog
             if keyCode == modalHotKey.keyCode && rawFlags.rawValue == modalHotKey.modifiers {
                 handleModalHotkey(); return nil
+            }
+            // Script hotkey: record, generate AppleScript, and execute
+            if keyCode == scriptHotKey.keyCode && rawFlags.rawValue == scriptHotKey.modifiers {
+                handleScriptHotkey(); return nil
             }
         }
         return Unmanaged.passUnretained(event)
@@ -530,6 +551,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let modalHK = NSMenuItem(title: "Change Modal Hotkey… (Currently: \(hotKeyDescription(modalHotKey)))", action: #selector(changeModalHotkey(_:)), keyEquivalent: "")
         modalHK.target = self
         menu.addItem(modalHK)
+        // Change Script Hotkey
+        let scriptHK = NSMenuItem(title: "Change Script Hotkey… (Currently: \(hotKeyDescription(scriptHotKey)))", action: #selector(changeScriptHotkey(_:)), keyEquivalent: "")
+        scriptHK.target = self
+        menu.addItem(scriptHK)
         // Quit
         let quit = NSMenuItem(title: "Quit SpeechCraft", action: #selector(quitApp(_:)), keyEquivalent: "q")
         quit.target = self
@@ -577,6 +602,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func changeModalHotkey(_ sender: Any?) {
         beginHotKeyCapture(type: .modal)
     }
+    @objc func changeScriptHotkey(_ sender: Any?) {
+        beginHotKeyCapture(type: .script)
+    }
 
     private func beginHotKeyCapture(type: HotKeyCaptureType) {
         captureType = type
@@ -610,6 +638,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.modalHotKey = hk
                 if let data = try? JSONEncoder().encode(hk) {
                     self.defaults.set(data, forKey: "ModalHotKey")
+                }
+            case .script:
+                self.scriptHotKey = hk
+                if let data = try? JSONEncoder().encode(hk) {
+                    self.defaults.set(data, forKey: "ScriptHotKey")
                 }
             }
             self.captureType = nil

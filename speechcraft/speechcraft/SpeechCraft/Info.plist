@@ -10,6 +10,8 @@
 	<string>SpeechCraft</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Recording audio for transcription</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>SpeechCraft needs to send AppleScript commands to other apps (e.g. Mail) to automate your instructions.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

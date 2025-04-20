@@ -217,6 +217,180 @@ Use paragraphs separated by blank lines and horizontal rules as '---'.
         }.resume()
     }
 
+    // MARK: - Script Chat Handling
+    /// Handle Option+D hotkey: record audio then generate AppleScript and execute.
+    func handleScriptHotkey() {
+        if isRecording && scriptMode {
+            scriptMode = false
+            let pb = NSPasteboard.general
+            let prevCount = pb.changeCount
+            simulateCopy()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                let newPB = NSPasteboard.general
+                if newPB.changeCount > prevCount,
+                   let sel = newPB.string(forType: .string), !sel.isEmpty {
+                    self.scriptSelectedText = sel
+                } else {
+                    self.scriptSelectedText = nil
+                }
+                self.stopScriptRecording()
+            }
+        } else {
+            scriptMode = true
+            scriptSelectedText = nil
+            startScriptRecording()
+        }
+    }
+
+    /// Begins script audio recording.
+    func startScriptRecording() {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let filename = "speechcraft_script_\(Date().timeIntervalSince1970).wav"
+        scriptAudioURL = tmpDir.appendingPathComponent(filename)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false
+        ]
+        do {
+            audioRecorder = try AVAudioRecorder(url: scriptAudioURL!, settings: settings)
+            audioRecorder?.prepareToRecord()
+            audioRecorder?.record()
+            isRecording = true
+            DispatchQueue.main.async { self.transcribeState = .recording }
+        } catch {
+            NSLog("startScriptRecording error: \(error)")
+        }
+    }
+
+    /// Stops script recording and triggers transcription.
+    func stopScriptRecording() {
+        audioRecorder?.stop()
+        isRecording = false
+        DispatchQueue.main.async { self.transcribeState = .transcribing }
+        guard let url = scriptAudioURL else { return }
+        getTranscription(of: url) { transcription in
+            self.performScriptAction(transcript: transcription,
+                                     selectedText: self.scriptSelectedText)
+        }
+    }
+
+    /// Generates AppleScript via LLM and executes it.
+    func performScriptAction(transcript: String, selectedText: String?) {
+        DispatchQueue.main.async { self.transcribeState = .transcribing }
+        let endpoint: String
+        let apiKey: String
+        switch serviceType {
+        case .openAI:
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            guard let key = openAIKey, !key.isEmpty else { return }
+            apiKey = "Bearer \(key)"
+        case .azure:
+            guard let ep = azureChatEndpoint, let key = azureKey,
+                  !ep.isEmpty, !key.isEmpty else { return }
+            endpoint = ep
+            apiKey = key
+        }
+        guard let url = URL(string: endpoint) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if serviceType == .openAI {
+            request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        } else {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
+        // Build payload with screenshot, selected text, and transcript
+        var contentArr: [[String: Any]] = []
+        if #available(macOS 13.0, *) {
+            if let screenshot = captureScreenshotDataURI() {
+                contentArr.append([
+                    "type": "image_url",
+                    "image_url": ["url": screenshot]
+                ])
+            }
+        }
+        if let sel = selectedText, !sel.isEmpty {
+            contentArr.append(["type": "text", "text": sel])
+        }
+        contentArr.append(["type": "text", "text": transcript])
+        // System prompt for AppleScript generation
+        let systemMsg: [String: Any] = [
+            "role": "system",
+            "content": UserDefaults.standard.string(forKey: "ScriptPrompt") ?? ""
+        ]
+        let userMsg: [String: Any] = ["role": "user", "content": contentArr]
+        let messages: [[String: Any]] = [systemMsg, userMsg]
+        let payload: [String: Any] = serviceType == .openAI
+            ? ["model": openAIChatModel, "messages": messages]
+            : ["messages": messages]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            var scriptCode = ""
+            if let error = error {
+                NSLog("Script generation error: \(error.localizedDescription)")
+            } else if let data = data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let choices = json["choices"] as? [[String: Any]],
+                      let first = choices.first,
+                      let msg = (first["message"] as? [String: Any])?["content"] as? String {
+                scriptCode = msg
+            }
+            // Log generated AppleScript and execute with result display
+            NSLog("Generated AppleScript: \(scriptCode)")
+            // Prepare script for execution (strip fences)
+            var execCode = scriptCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            if execCode.hasPrefix("```") , let nl = execCode.firstIndex(of: "\n") {
+                execCode = String(execCode[execCode.index(after: nl)...])
+            }
+            if execCode.hasSuffix("```") {
+                execCode = String(execCode.dropLast(3))
+            }
+            execCode = execCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            NSLog("Executing AppleScript: \(execCode)")
+            // Execute and capture result or error
+            var resultString = ""
+            if let appleScript = NSAppleScript(source: execCode) {
+                var errDict: NSDictionary?
+                let descriptor = appleScript.executeAndReturnError(&errDict)
+                if let err = errDict as? [String: Any] {
+                    // Show AppleScript error in result
+                    NSLog("AppleScript execution error: \(err)")
+                    if let msg = err[NSAppleScript.errorMessage] as? String {
+                        resultString = "Error: \(msg)"
+                    } else {
+                        resultString = "Error: \(err)"
+                    }
+                } else {
+                    // No error, capture descriptor value
+                    resultString = descriptor.stringValue ?? ""
+                }
+            }
+            // Display script and result in one modal
+            DispatchQueue.main.async {
+                let fullMd = """
+### Generated AppleScript
+
+```applescript
+\(scriptCode)
+
+```
+
+### Execution Result
+
+```
+\(resultString)
+```
+"""
+                self.showModal(fullMd)
+                self.transcribeState = .ready
+            }
+        }.resume()
+    }
+    
     // MARK: - Window Delegate Cleanup
     func windowWillClose(_ notification: Notification) {
         guard let win = notification.object as? NSWindow else { return }
