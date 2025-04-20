@@ -29,6 +29,7 @@
 - 🔐 **Flexible Deployment**: Supports App Store (sandboxed) or Developer ID (hardened runtime) builds.
 - 🚀 **Minimal Footprint**: Runs in the menu bar, no Dock icon.
 - 💬 **Modal Chat**: Press **Option+A** to record an audio instruction (optionally with selected text & screenshot), then view the AI’s response in a modal dialog with Copy/Close buttons.
+- 🍎 **Script Automation**: Press **Option+D** to copy the current selection (if any) and include a screenshot, record an audio command, then have GPT‑4o generate and execute AppleScript to automate your Mac, with a preview of the script and its execution result.
 
 ## Requirements
 - macOS 12.0 (Monterey) or later
@@ -76,6 +77,7 @@ Developers who wish to build from source can follow the instructions below.
 - **Option+S**: Start/stop voice recording → automatic transcription & paste.
 - **Option+Shift+S**: Copy selection → record instruction → GPT‑4o applies changes → replaces text.
 - **Option+A**: Start/stop audio instruction recording (captures optional selected text & screenshot) → sends to AI chat → displays the response in a modal dialog with Copy/Close options.
+- **Option+D**: Copy selection (if any) & screenshot → record an audio command → GPT‑4o generates and executes AppleScript to automate your Mac tasks → shows the generated script and execution result.
 
 🟢 Ready | 🔴 Recording | 🔵 Processing
 
